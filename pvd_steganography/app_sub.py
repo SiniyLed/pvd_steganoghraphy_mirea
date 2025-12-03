@@ -166,31 +166,49 @@ with tab2:
     col1, col2 = st.columns(2)
 
     with col1:
-        # Загрузка стего-изображения
+        #загрузка оригинального изображения
+        original_image_upload = st.file_uploader(
+            "Загрузите ОРИГИНАЛЬНОЕ изображение (без подписи)",
+            type=['png', 'jpg', 'jpeg'],
+            key="original_verify"
+        )
+
+        #загрузка стего-изображения
         stego_image_upload = st.file_uploader(
-            "Выберите изображение со скрытой подписью",
+            "Загрузите изображение СО СКРЫТОЙ подписью",
             type=['png', 'jpg', 'jpeg'],
             key="stego_verify"
         )
 
-        if stego_image_upload:
+        if stego_image_upload and original_image_upload:
+            #предпросмотр изображений
+            original_img = Image.open(original_image_upload)
             stego_img = Image.open(stego_image_upload)
-            st.image(stego_img, caption="Стего-изображение", use_column_width=True)
+
+            col_preview1, col_preview2 = st.columns(2)
+            with col_preview1:
+                st.image(original_img, caption="Оригинальное изображение", use_column_width=True)
+            with col_preview2:
+                st.image(stego_img, caption="Стего-изображение", use_column_width=True)
 
             if st.button("Извлечь подпись", type="primary"):
                 with st.spinner("Извлекаю подпись..."):
                     try:
-                        #сохранение temp
+                        #сохранение временных файлов
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_orig:
+                            original_img.save(tmp_orig.name)
+                            original_path = tmp_orig.name
+
                         with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_stego:
                             stego_img.save(tmp_stego.name)
                             stego_path = tmp_stego.name
 
-                        #извлечение
+                        #извлечение подписи
                         extracted_path = "extracted_signature.txt"
                         pvd = pvd_lib()
 
-                        #использование той же картинки как ориг
-                        result = pvd.pvd_extract(stego_path, extracted_path, stego_path)
+                        #вызов с двумя разными файлами
+                        result = pvd.pvd_extract(original_path, extracted_path, stego_path)
 
                         if result and os.path.exists(extracted_path):
                             #чтение с указанием кодировки UTF-8 и обработкой ошибок
@@ -198,7 +216,6 @@ with tab2:
                                 with open(extracted_path, 'r', encoding='utf-8') as f:
                                     extracted_data = f.read()
                             except UnicodeDecodeError:
-                                # Если UTF-8 не работает, пробуем другие кодировки
                                 try:
                                     with open(extracted_path, 'r', encoding='cp1251') as f:
                                         extracted_data = f.read()
@@ -206,7 +223,7 @@ with tab2:
                                     with open(extracted_path, 'r', encoding='latin-1') as f:
                                         extracted_data = f.read()
 
-                            #парсер подписи и сообщения
+                            #парсинг подписи и сообщения
                             if "SIGNATURE:" in extracted_data and "MESSAGE:" in extracted_data:
                                 parts = extracted_data.split(":")
                                 if len(parts) >= 4:
@@ -225,7 +242,8 @@ with tab2:
                                 st.error("Не удалось распарсить извлеченные данные")
                                 st.code(f"Сырые данные: {extracted_data[:100]}...")
 
-                        #чистка
+                        #чистка временных файлов
+                        os.unlink(original_path)
                         os.unlink(stego_path)
                         if os.path.exists(extracted_path):
                             os.unlink(extracted_path)
@@ -234,7 +252,7 @@ with tab2:
                         st.error(f"Ошибка при извлечении: {str(e)}")
 
     with col2:
-        #проверка подписания
+        #проверка подписи
         if st.session_state.extracted_signature and st.session_state.extracted_message:
             st.subheader("Проверка подлинности")
 
