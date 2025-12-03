@@ -48,13 +48,11 @@ class PVDSteganographyAnalyzer:
         pixels = image.size[0] * image.size[1]
 
         utilization = (secret_size / capacity) * 100
-        bpp = (secret_size * 8) / pixels
 
         return {
             'capacity_bytes': capacity,
             'secret_size_bytes': secret_size,
             'utilization_percent': utilization,
-            'bpp': bpp,
             'total_pixels': pixels
         }
 
@@ -81,7 +79,6 @@ class PVDSteganographyAnalyzer:
         plt.legend(fontsize=12)
         plt.grid(True, alpha=0.3)
 
-        # Добавляем текстовую информацию
         orig_mean = np.mean(orig_all_pixels)
         stego_mean = np.mean(stego_all_pixels)
         orig_std = np.std(orig_all_pixels)
@@ -112,6 +109,7 @@ class PVDSteganographyAnalyzer:
             'mean_difference': abs(orig_mean - stego_mean),
             'std_difference': abs(orig_std - stego_std)
         }
+
     def interpret_metrics(self, metrics, capacity_info=None):
         if metrics['PSNR'] > 40:
             psnr_interp = "Excellent (>40 dB) - changes invisible"
@@ -143,27 +141,11 @@ class PVDSteganographyAnalyzer:
         else:
             ssim_interp = "Moderate similarity (<0.90)"
 
-        bpp_interp = "Insufficient data for evaluation"
-
-        if capacity_info and 'bpp' in capacity_info:
-            bpp = capacity_info['bpp']
-            if bpp < 0.01:
-                bpp_interp = "Very low density - conservative embedding"
-            elif bpp < 0.05:
-                bpp_interp = "Low density - safe embedding"
-            elif bpp < 0.1:
-                bpp_interp = "Medium density - optimal embedding"
-            elif bpp < 0.2:
-                bpp_interp = "High density - aggressive embedding"
-            else:
-                bpp_interp = "Very high density - detection risk"
-
         return {
             'PSNR_interpretation': psnr_interp,
             'MSE_interpretation': mse_interp,
             'RMSE_interpretation': rmse_interp,
-            'SSIM_interpretation': ssim_interp,
-            'bpp_interpretation': bpp_interp
+            'SSIM_interpretation': ssim_interp
         }
 
     def run_pvd_experiments(self, original_image, output_dir="pvd_results"):
@@ -179,7 +161,7 @@ class PVDSteganographyAnalyzer:
             max_capacity // 4,
             max_capacity // 2,
             max_capacity * 3 // 4,
-            max_capacity
+            int(max_capacity * 0.95)
         ]
 
         results = []
@@ -192,7 +174,7 @@ class PVDSteganographyAnalyzer:
             with open(test_file, 'wb') as f:
                 f.write(test_data)
 
-            stego_img = f"stego_{i-1}.png"
+            stego_img = f"stego_{i}.png"
             embedded_bits = self.pvd.pvd_embed(original_image, test_file, stego_img)
 
             quality = self.calculate_quality_metrics(original_image, stego_img)
@@ -214,7 +196,6 @@ class PVDSteganographyAnalyzer:
             print(f"   RMSE: {quality['RMSE']:.6f} - {interpretation['RMSE_interpretation']}")
             print(f"   SSIM: {quality['SSIM']:.6f} - {interpretation['SSIM_interpretation']}")
             print(f"   Capacity utilization: {capacity['utilization_percent']:.1f}%")
-            print(f"   bpp: {capacity['bpp']:.4f} - {interpretation['bpp_interpretation']}")
 
         print(f"\n3. HISTOGRAM ANALYSIS (50% load test):")
         middle_stego = "stego_2.png"
@@ -225,11 +206,11 @@ class PVDSteganographyAnalyzer:
         print(f"   Standard deviation difference: {hist_analysis['std_difference']:.6f}")
 
         print(f"\n4. SUMMARY RESULTS:")
-        print("Size   | PSNR (dB) | MSE      | RMSE     | SSIM     | Utilization | bpp")
-        print("-" * 85)
+        print("Size   | PSNR (dB) | MSE      | RMSE     | SSIM     | Utilization")
+        print("-" * 75)
         for result in results:
             print(
-                f"{result['secret_size']:6} | {result['quality']['PSNR']:8.2f} | {result['quality']['MSE']:8.6f} | {result['quality']['RMSE']:8.6f} | {result['quality']['SSIM']:8.6f} | {result['capacity']['utilization_percent']:10.1f}% | {result['capacity']['bpp']:.4f}")
+                f"{result['secret_size']:6} | {result['quality']['PSNR']:8.2f} | {result['quality']['MSE']:8.6f} | {result['quality']['RMSE']:8.6f} | {result['quality']['SSIM']:8.6f} | {result['capacity']['utilization_percent']:10.1f}%")
 
         self.save_detailed_report(results, output_dir)
 
@@ -245,17 +226,16 @@ class PVDSteganographyAnalyzer:
             f.write("- PSNR (Пиковое отношение сигнал/шум) - отношение сигнал/шум в дБ\n")
             f.write("- MSE (Среднеквадратичная ошибка) - средняя квадратичная ошибка\n")
             f.write("- RMSE (Среднеквадратичное отклонение) - корень из MSE\n")
-            f.write("- SSIM (Структурное сходство) - индекс структурного сходства (0-1)\n")
-            f.write("- bpp (бит на пиксель) - количество бит на один пиксель\n\n")
+            f.write("- SSIM (Структурное сходство) - индекс структурного сходства (0-1)\n\n")
 
             f.write("РЕЗУЛЬТАТЫ ЭКСПЕРИМЕНТОВ:\n")
-            f.write("-" * 85 + "\n")
-            f.write("Размер  | PSNR (дБ) | MSE      | RMSE     | SSIM     | Загрузка   | bpp\n")
-            f.write("-" * 85 + "\n")
+            f.write("-" * 75 + "\n")
+            f.write("Размер  | PSNR (дБ) | MSE      | RMSE     | SSIM     | Загрузка\n")
+            f.write("-" * 75 + "\n")
 
             for result in results:
                 f.write(
-                    f"{result['secret_size']:6} | {result['quality']['PSNR']:8.2f} | {result['quality']['MSE']:8.6f} | {result['quality']['RMSE']:8.6f} | {result['quality']['SSIM']:8.6f} | {result['capacity']['utilization_percent']:10.1f}% | {result['capacity']['bpp']:.4f}\n")
+                    f"{result['secret_size']:6} | {result['quality']['PSNR']:8.2f} | {result['quality']['MSE']:8.6f} | {result['quality']['RMSE']:8.6f} | {result['quality']['SSIM']:8.6f} | {result['capacity']['utilization_percent']:10.1f}%\n")
 
             f.write("\nВЫВОДЫ:\n")
             f.write("- Метод PVD обеспечивает высокую незаметность (PSNR > 40 дБ)\n")
@@ -269,5 +249,4 @@ class PVDSteganographyAnalyzer:
 
 if __name__ == "__main__":
     analyzer = PVDSteganographyAnalyzer()
-
     results = analyzer.run_pvd_experiments("test.png")
